@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'screens/auth/login_screen.dart';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
 // Routes Android Emulator to host PC (10.0.2.2) and iOS/Web to localhost
@@ -42,7 +43,7 @@ class EleesaApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const MainShell(),
+      home: const LoginScreen(),
     );
   }
 }

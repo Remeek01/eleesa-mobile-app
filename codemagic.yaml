@@ -56,4 +56,4 @@ workflows:
           export PATH="$HOME/.shorebird/bin:$PATH"
           if [ -d "eleesa_app" ]; then cd eleesa_app; fi
           shorebird patch android --flutter-version=3.47.9
-          shorebird patch ios --no-codesign --flutter-version=3.47.9S
+          shorebird patch ios --no-codesign --flutter-version=3.47.9
