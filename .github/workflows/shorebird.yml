@@ -38,8 +38,7 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
       - name: Push Android Live OTA Patch
         if: github.event.inputs.mode != 'release'
-        run: shorebird patch --platforms=android
-
+        run: shorebird patch --platforms=android --track=stable --release-version=latest --allow-asset-diffs
   ios:
     name: iOS (${{ github.event.inputs.mode || 'patch' }})
     runs-on: macos-latest
@@ -67,4 +66,4 @@ jobs:
           path: build/ios/ipa/eleesa_app.ipa
       - name: Push iOS Live OTA Patch
         if: github.event.inputs.mode != 'release'
-        run: shorebird patch --platforms=ios --no-codesign
+        run: shorebird patch --platforms=ios --no-codesign --track=stable --release-version=latest --allow-asset-diffs
