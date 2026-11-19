@@ -3,9 +3,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
+import 'api_service.dart';
 // Routes Android Emulator to host PC (10.0.2.2) and iOS/Web to localhost
-String get apiBase => 'https://eleesa-backend.onrender.com/api/v1';
+String get apiBase => '${ApiService.baseUrl}/api/v1';
 
 const Map<String, String?> roleTokens = {
   'visitor': null,
@@ -53,7 +53,6 @@ class MainShell extends StatefulWidget {
   @override
   State<MainShell> createState() => _MainShellState();
 }
-
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   String _role = 'visitor';
@@ -72,7 +71,29 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return Scaffold(
-      body: tabs[_currentIndex],
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: ApiService.checkConnection(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const LinearProgressIndicator();
+                  }
+                  if (snapshot.hasError) {
+                    return Text('Sync error: ${snapshot.error}');
+                  }
+                  return Text('PostgreSQL connected: ${snapshot.data?['time']}');
+                },
+              ),
+            ),
+          ),
+          Expanded(child: tabs[_currentIndex]),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (idx) => setState(() => _currentIndex = idx),

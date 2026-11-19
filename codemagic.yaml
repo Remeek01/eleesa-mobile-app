@@ -1,23 +1,59 @@
 ﻿workflows:
-  ios-release-workflow:
-    name: ELEESA iOS Build
-    max_build_duration: 60
+  build-base-releases:
+    name: Build Base Releases (Android APK + iOS IPA)
+    max_build_duration: 30
     instance_type: mac_mini_m2
     environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
+      groups:
+        - shorebird
+      vars:
+        CI: "true"
     scripts:
-      - name: Get Flutter packages
-        script: flutter pub get
-      - name: Install CocoaPods
-        script: find . -name "Podfile" -execdir pod install \;
-      - name: Build unsigned iOS app
-        script: flutter build ios --release --no-codesign
-      - name: Package IPA for Sideloadly / Signing
+      - name: Install Shorebird CLI
         script: |
+          curl -fsSL https://shorebird.dev/install.sh | bash
+      - name: Build Android & iOS Shorebird Releases
+        script: |
+          export PATH="$HOME/.shorebird/bin:$PATH"
+          if [ -d "eleesa_app" ]; then cd eleesa_app; fi
+          shorebird release android --artifact apk --flutter-version=3.47.9
+          shorebird release ios --no-codesign --flutter-version=3.47.9
+      - name: Package Unsigned IPA for Sideloadly
+        script: |
+          if [ -d "eleesa_app" ]; then cd eleesa_app; fi
           mkdir -p build/ios/ipa/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
-          cd build/ios/ipa && zip -r ELEESA_iOS.ipa Payload
+          if [ -d "build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app" ]; then
+            cp -r build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app build/ios/ipa/Payload/
+          else
+            cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          fi
+          cd build/ios/ipa && zip -r eleesa_app.ipa Payload
     artifacts:
-      - build/ios/ipa/ELEESA_iOS.ipa
+      - "**/build/app/outputs/flutter-apk/app-release.apk"
+      - "**/build/ios/ipa/eleesa_app.ipa"
+
+  push-ota-updates:
+    name: Push Live OTA Patch (Android + iOS)
+    max_build_duration: 20
+    instance_type: mac_mini_m2
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    environment:
+      groups:
+        - shorebird
+      vars:
+        CI: "true"
+    scripts:
+      - name: Install Shorebird CLI
+        script: |
+          curl -fsSL https://shorebird.dev/install.sh | bash
+      - name: Push Over-the-Air Patches to Both Phones
+        script: |
+          export PATH="$HOME/.shorebird/bin:$PATH"
+          if [ -d "eleesa_app" ]; then cd eleesa_app; fi
+          shorebird patch android --flutter-version=3.47.9
+          shorebird patch ios --no-codesign --flutter-version=3.47.9
