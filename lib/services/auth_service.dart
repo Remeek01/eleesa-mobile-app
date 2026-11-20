@@ -1,25 +1,72 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 
 class AuthService {
-  // Replace with your live Render URL (e.g., https://eleesa-api.onrender.com/api/auth)
   static const String baseUrl = 'https://eleesa-backend.onrender.com/api/auth';
+
+  String _serializeRole(UserRole role) {
+    final name = role.name;
+    if (name == 'hodAdmin' || name == 'hod_admin') {
+      return 'hod_admin';
+    }
+    return name;
+  }
+
+  Future<Map<String, dynamic>> _postWithWakeupFeedback({
+    required String endpoint,
+    required Map<String, dynamic> payload,
+    void Function(String status)? onStatusChange,
+  }) async {
+    Timer? wakeupTimer;
+    Timer? slowWakeupTimer;
+
+    if (onStatusChange != null) {
+      wakeupTimer = Timer(const Duration(seconds: 3), () {
+        onStatusChange('Waking up ELEESA server...');
+      });
+      slowWakeupTimer = Timer(const Duration(seconds: 12), () {
+        onStatusChange('Energizing Render instance & database link...');
+      });
+    }
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/$endpoint'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return data;
+      }
+      throw Exception(data['message'] ?? 'Request failed');
+    } on TimeoutException {
+      throw Exception('Server took too long to wake up. Please tap again.');
+    } finally {
+      wakeupTimer?.cancel();
+      slowWakeupTimer?.cancel();
+    }
+  }
+
   Future<EleesaUser> login({
     required String email,
     required String password,
+    void Function(String status)? onStatusChange,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email.trim(), 'password': password}),
+    final data = await _postWithWakeupFeedback(
+      endpoint: 'login',
+      payload: {
+        'email': email.trim(),
+        'password': password,
+      },
+      onStatusChange: onStatusChange,
     );
-
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return EleesaUser.fromJson(data['user'] ?? data);
-    }
-    throw Exception(data['message'] ?? 'Invalid email or password');
+    return EleesaUser.fromJson(data['user'] ?? data);
   }
 
   Future<EleesaUser> signUp({
@@ -27,57 +74,53 @@ class AuthService {
     required String email,
     required String password,
     required UserRole role,
+    String? indexOrStaffId,
+    String? level,
+    void Function(String status)? onStatusChange,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/signup'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    final data = await _postWithWakeupFeedback(
+      endpoint: 'signup',
+      payload: {
         'full_name': fullName.trim(),
         'email': email.trim(),
         'password': password,
-        'role': role.name, // 'student', 'lecturer', or 'hod'
-      }),
+        'role': _serializeRole(role),
+        if (indexOrStaffId != null && indexOrStaffId.trim().isNotEmpty)
+          'index_or_staff_id': indexOrStaffId.trim(),
+        if (level != null && level.trim().isNotEmpty) 'level': level.trim(),
+      },
+      onStatusChange: onStatusChange,
     );
-
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return EleesaUser.fromJson(data['user'] ?? data);
-    }
-    throw Exception(data['message'] ?? 'Registration failed');
+    return EleesaUser.fromJson(data['user'] ?? data);
   }
 
-  Future<String> requestPasswordReset({required String email}) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/forgot-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email.trim()}),
+  Future<String> requestPasswordReset({
+    required String email,
+    void Function(String status)? onStatusChange,
+  }) async {
+    final data = await _postWithWakeupFeedback(
+      endpoint: 'forgot-password',
+      payload: {'email': email.trim()},
+      onStatusChange: onStatusChange,
     );
-
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return data['message'] ?? 'Password recovery instructions sent to your email.';
-    }
-    throw Exception(data['message'] ?? 'Could not process recovery request');
+    return data['message'] ?? 'Recovery code sent.';
   }
+
   Future<String> resetPassword({
     required String email,
     required String resetCode,
     required String newPassword,
+    void Function(String status)? onStatusChange,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/reset-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    final data = await _postWithWakeupFeedback(
+      endpoint: 'reset-password',
+      payload: {
         'email': email.trim(),
         'reset_code': resetCode.trim(),
         'new_password': newPassword,
-      }),
+      },
+      onStatusChange: onStatusChange,
     );
-
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return data['message'] ?? 'Password updated successfully.';
-    }
-    throw Exception(data['message'] ?? 'Failed to reset password');
+    return data['message'] ?? 'Password updated successfully.';
   }
 }
