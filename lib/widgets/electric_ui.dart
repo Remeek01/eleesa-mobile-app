@@ -341,3 +341,450 @@ class ColdStartStatusBanner extends StatelessWidget {
     );
   }
 }
+/// 1. STUDENT HUB HEADER: Live AC Oscilloscope Telemetry Deck (Cyan/Navy)
+class StudentOscilloscopeHeader extends StatefulWidget {
+  final String studentName;
+  final String level;
+  final String indexNumber;
+  final VoidCallback onProfileTap;
+
+  const StudentOscilloscopeHeader({
+    super.key,
+    required this.studentName,
+    required this.level,
+    required this.indexNumber,
+    required this.onProfileTap,
+  });
+
+  @override
+  State<StudentOscilloscopeHeader> createState() =>
+      _StudentOscilloscopeHeaderState();
+}
+
+class _StudentOscilloscopeHeaderState extends State<StudentOscilloscopeHeader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _waveCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _waveCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF070D19), Color(0xFF0F2942)],
+        ),
+        border: Border.all(
+          color: EleesaColors.electricCyan.withValues(alpha: 0.5),
+          width: 1.4,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(21),
+        child: AnimatedBuilder(
+          animation: _waveCtrl,
+          builder: (context, child) {
+            return CustomPaint(
+              painter: _OscilloscopePainter(phase: _waveCtrl.value * 2 * math.pi),
+              child: child,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: EleesaColors.electricCyan.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: EleesaColors.electricCyan),
+                      ),
+                      child: Text(
+                        'STUDENT TELEMETRY • LVL ${widget.level.isEmpty ? "---" : widget.level}',
+                        style: const TextStyle(
+                          color: EleesaColors.electricCyan,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    InkWell(
+                      onTap: widget.onProfileTap,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.badge_outlined, size: 15, color: EleesaColors.electricCyan),
+                            SizedBox(width: 6),
+                            Text(
+                              'My Profile',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  widget.studentName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.indexNumber.isEmpty
+                      ? 'Complete your student onboarding card'
+                      : 'Index ID: ${widget.indexNumber}  •  DB Node: level_${widget.level}_students',
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OscilloscopePainter extends CustomPainter {
+  final double phase;
+  _OscilloscopePainter({required this.phase});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = EleesaColors.electricCyan.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+
+    for (double x = 0; x < size.width; x += 28) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+
+    final wavePaint = Paint()
+      ..color = EleesaColors.electricCyan.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    final path = Path();
+    final baseline = size.height - 18;
+    for (double x = 0; x <= size.width; x += 3) {
+      final y = baseline + math.sin((x * 0.04) + phase) * 8;
+      if (x == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, wavePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _OscilloscopePainter oldDelegate) =>
+      oldDelegate.phase != phase;
+}
+
+/// 2. LECTURER HUB HEADER: 3-Phase Substation Busbar Console (Amber/Slate)
+class LecturerBusbarHeader extends StatelessWidget {
+  final String lecturerName;
+  final String titleAndSpec;
+  final int totalStudents;
+  final VoidCallback onProfileTap;
+
+  const LecturerBusbarHeader({
+    super.key,
+    required this.lecturerName,
+    required this.titleAndSpec,
+    required this.totalStudents,
+    required this.onProfileTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF111827), Color(0xFF292524)],
+        ),
+        border: Border.all(
+          color: EleesaColors.highVoltageAmber.withValues(alpha: 0.6),
+          width: 1.4,
+        ),
+      ),
+      child: CustomPaint(
+        painter: _BusbarPainter(),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EleesaColors.highVoltageAmber.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: EleesaColors.highVoltageAmber),
+                    ),
+                    child: const Text(
+                      '3-PHASE FACULTY BUSBAR',
+                      style: TextStyle(
+                        color: EleesaColors.highVoltageAmber,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  InkWell(
+                    onTap: onProfileTap,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.manage_accounts_outlined, size: 15, color: EleesaColors.highVoltageAmber),
+                          SizedBox(width: 6),
+                          Text(
+                            'Faculty Profile',
+                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                lecturerName,
+                style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                titleAndSpec,
+                style: const TextStyle(color: Color(0xFFD6D3D1), fontSize: 12.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Active Enrolled Registry: $totalStudents Students across 4 Levels',
+                style: const TextStyle(
+                  color: EleesaColors.highVoltageAmber,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BusbarPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final phaseColors = [
+      const Color(0xFFEF4444).withValues(alpha: 0.25), // L1 Red
+      const Color(0xFFF59E0B).withValues(alpha: 0.25), // L2 Yellow
+      const Color(0xFF3B82F6).withValues(alpha: 0.25), // L3 Blue
+    ];
+    for (int i = 0; i < 3; i++) {
+      final y = size.height - 26.0 + (i * 7.0);
+      final p = Paint()
+        ..color = phaseColors[i]
+        ..strokeWidth = 2.0;
+      canvas.drawLine(Offset(16, y), Offset(size.width - 16, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// 3. HoD HUB HEADER: Department Main Grid Control Room (Emerald/Gold/Obsidian)
+class HodMainGridHeader extends StatelessWidget {
+  final String hodName;
+  final Map<String, int> levelCounts;
+  final VoidCallback onProfileTap;
+
+  const HodMainGridHeader({
+    super.key,
+    required this.hodName,
+    required this.levelCounts,
+    required this.onProfileTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const emerald = Color(0xFF10B981);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF050B14), Color(0xFF063729)],
+        ),
+        border: Border.all(
+          color: emerald.withValues(alpha: 0.65),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: emerald.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: emerald),
+                  ),
+                  child: const Text(
+                    'MAIN GRID CONTROL • HoD COMMAND',
+                    style: TextStyle(
+                      color: emerald,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: onProfileTap,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.admin_panel_settings_outlined, size: 15, color: emerald),
+                        SizedBox(width: 6),
+                        Text(
+                          'HoD Profile',
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              hodName,
+              style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Departmental Telemetry & Encrypted 4-Level Student Registry',
+              style: TextStyle(color: Color(0xFFA7F3D0), fontSize: 12.5),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: ['100', '200', '300', '400'].map((lvl) {
+                final count = levelCounts[lvl] ?? 0;
+                return Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(88, 69, 43, 172),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color.fromARGB(88, 49, 17, 146)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'LVL $lvl',
+                          style: const TextStyle(
+                            color: Color(0xFF6EE7B7),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$count',
+                          style: const TextStyle(
+                            color: Color.fromARGB(255, 215, 15, 15),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
