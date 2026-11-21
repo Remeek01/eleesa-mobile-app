@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+typedef JsonMap = Map<String, dynamic>;
+
 class Wave3HubScreen extends StatefulWidget {
   final int initialTabIndex;
   final String userRole;
@@ -38,11 +40,11 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
   String _selectedLevel = 'ALL';
   String _selectedLab = 'ALL';
 
-  List> _resources = [];
-  List> _equipment = [];
-  List> _bookings = [];
-  List> _projects = [];
-  List> _attachments = [];
+  List<JsonMap> _resources = [];
+  List<JsonMap> _equipment = [];
+  List<JsonMap> _bookings = [];
+  List<JsonMap> _projects = [];
+  List<JsonMap> _attachments = [];
 
   bool get _isStaffOrAdmin {
     final r = widget.userRole.toLowerCase();
@@ -82,18 +84,18 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
         http.get(Uri.parse('$_baseUrl/api/wave3/attachments')),
       ]);
 
-      final resJson = jsonDecode(responses[0].body) as Map<String, dynamic>;
-      final labJson = jsonDecode(responses[1].body) as Map<String, dynamic>;
-      final prjJson = jsonDecode(responses[2].body) as Map<String, dynamic>;
-      final attJson = jsonDecode(responses[3].body) as Map<String, dynamic>;
+      final resJson = jsonDecode(responses[0].body) as JsonMap;
+      final labJson = jsonDecode(responses[1].body) as JsonMap;
+      final prjJson = jsonDecode(responses[2].body) as JsonMap;
+      final attJson = jsonDecode(responses[3].body) as JsonMap;
 
       if (!mounted) return;
       setState(() {
-        _resources = List>.from(resJson['resources'] ?? []);
-        _equipment = List>.from(labJson['equipment'] ?? []);
-        _bookings = List>.from(labJson['bookings'] ?? []);
-        _projects = List>.from(prjJson['projects'] ?? []);
-        _attachments = List>.from(attJson['attachments'] ?? []);
+        _resources = List<JsonMap>.from(resJson['resources'] ?? []);
+        _equipment = List<JsonMap>.from(labJson['equipment'] ?? []);
+        _bookings = List<JsonMap>.from(labJson['bookings'] ?? []);
+        _projects = List<JsonMap>.from(prjJson['projects'] ?? []);
+        _attachments = List<JsonMap>.from(attJson['attachments'] ?? []);
         _loading = false;
       });
     } catch (e) {
@@ -532,7 +534,7 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
               _inputField(titleCtrl, 'Document Title'),
               _inputField(codeCtrl, 'Course Code (e.g. EL 353)'),
               DropdownButtonFormField<String>(
-                value: level,
+                initialValue: level,
                 dropdownColor: _cardSurface,
                 style: const TextStyle(color: Colors.white),
                 items: ['100', '200', '300', '400']
@@ -542,7 +544,7 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: category,
+                initialValue: category,
                 dropdownColor: _cardSurface,
                 style: const TextStyle(color: Colors.white),
                 items: ['Lecture Notes', 'Past Questions', 'Lab Manual', 'Tutorial Sheet']
@@ -602,7 +604,7 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedLab,
+                initialValue: selectedLab,
                 isExpanded: true,
                 dropdownColor: _cardSurface,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -669,7 +671,7 @@ class _Wave3HubScreenState extends State<Wave3HubScreen>
             children: [
               _inputField(titleCtrl, 'Project Title'),
               DropdownButtonFormField<String>(
-                value: category,
+                initialValue: category,
                 dropdownColor: _cardSurface,
                 style: const TextStyle(color: Colors.white),
                 items: [
