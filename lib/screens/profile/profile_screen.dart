@@ -28,28 +28,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadProfile();
   }
 
-  Future<void> _load() async {
+  Future<void> _loadProfile() async {
     setState(() => _loading = true);
     try {
-      final data = await _profileService.fetchProfile(widget.email);
+      final res = await _profileService.fetchProfile(widget.email);
+      final rawProf = res['profile'];
       if (mounted) {
         setState(() {
-          _profile = data['profile'] as Map<String, dynamic>?;
-          _loading = false;
+          if (rawProf is Map<String, dynamic>) {
+            _profile = rawProf;
+          } else if (rawProf is Map) {
+            _profile = Map<String, dynamic>.from(rawProf);
+          } else {
+            _profile = null;
+          }
         });
       }
     } catch (_) {
+      // Keep existing state on network retry
+    } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  String _mask(dynamic val) {
-    final s = (val ?? '').toString();
+  Future<void> _editProfile() async {
+    final p = _profile ?? {};
+    await showProfileOnboardingPopup(
+      context: context,
+      email: widget.email,
+      initialFullName: (p['full_name'] ?? widget.fullName).toString(),
+      roleKey: widget.roleKey,
+      isMandatory: false,
+    );
+    await _loadProfile();
+  }
+
+  String _val(dynamic raw) {
+    final s = (raw ?? '').toString().trim();
+    return s.isEmpty ? 'Not set' : s;
+  }
+
+  String _sensitiveVal(dynamic raw) {
+    final s = (raw ?? '').toString().trim();
     if (s.isEmpty) return 'Not set';
-    return _revealSensitive ? s : '••••••••••••';
+    return _revealSensitive ? s : '••••••••••';
   }
 
   @override
@@ -57,6 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final p = _profile ?? {};
     final isStudent =
         widget.roleKey == 'student' || widget.roleKey == 'executive';
+    final displayName = _val(p['full_name'] ?? widget.fullName);
 
     return Scaffold(
       appBar: AppBar(
@@ -64,82 +90,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: EleesaColors.deepNavy,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            tooltip: _revealSensitive ? 'Mask PII' : 'Reveal PII',
-            icon: Icon(
-              _revealSensitive ? Icons.visibility_off : Icons.visibility,
-              color: EleesaColors.electricCyan,
-            ),
+          TextButton(
             onPressed: () =>
                 setState(() => _revealSensitive = !_revealSensitive),
+            child: Text(
+              _revealSensitive ? 'Hide PII' : 'Reveal PII',
+              style: const TextStyle(
+                color: EleesaColors.electricCyan,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                CircuitGridHeader(
-                  title: (p['full_name'] ?? widget.fullName).toString(),
-                  subtitle:
-                      'Database Node: ${p['table_name'] ?? 'Pending Setup'}  •  AES-256-GCM',
-                  isStepTwo: true,
-                ),
-                const SizedBox(height: 18),
-                _tile('Email Address', widget.email),
-                _tile(
-                  isStudent ? 'Student Index Number' : 'Staff ID',
-                  (p['index_number'] ?? p['staff_id'] ?? 'Not set').toString(),
-                ),
-                if (isStudent)
-                  _tile('Academic Level', 'Level ${p['level'] ?? 'Not set'}'),
-                if (!isStudent)
-                  _tile('Academic Title', (p['academic_title'] ?? 'Not set').toString()),
-                _tile('Specialization', (p['specialization'] ?? 'Not set').toString()),
-                _tile('Gender', (p['gender'] ?? 'Not set').toString()),
-                _tile('Date of Birth (Encrypted)', _mask(p['dob'])),
-                _tile('Phone Number (Encrypted)', _mask(p['phone'])),
-                _tile(
-                  isStudent
-                      ? 'Hostel / Residence (Encrypted)'
-                      : 'Office & Hours',
-                  isStudent
-                      ? _mask(p['hostel'])
-                      : (p['office_hours'] ?? 'Not set').toString(),
-                ),
-                _tile(
-                  isStudent
-                      ? 'Guardian Emergency Contact (Encrypted)'
-                      : 'Office Direct Line (Encrypted)',
-                  _mask(isStudent ? p['emergency_contact'] : p['office_line']),
-                ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () async {
-                    final saved = await showProfileOnboardingPopup(
-                      context: context,
-                      email: widget.email,
-                      initialFullName:
-                          (p['full_name'] ?? widget.fullName).toString(),
-                      roleKey: widget.roleKey,
-                      existingProfile: _profile,
-                      isMandatory: false,
-                    );
-                    if (saved == true) _load();
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: EleesaColors.deepNavy,
-                    foregroundColor: EleesaColors.electricCyan,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
+          : RefreshIndicator(
+              onRefresh: _loadProfile,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: EleesaColors.deepNavy,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: EleesaColors.electricCyan,
+                          child: Text(
+                            displayName.isNotEmpty
+                                ? displayName[0].toUpperCase()
+                                : 'E',
+                            style: const TextStyle(
+                              color: EleesaColors.deepNavy,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'AES-256-GCM Protected • ${widget.roleKey.toUpperCase()}',
+                                style: const TextStyle(
+                                  color: EleesaColors.electricCyan,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text(
-                    'Edit Personal Details',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  const SizedBox(height: 16),
+                  _tile('Full Name', displayName),
+                  _tile('Email Address', widget.email),
+                  if (isStudent) ...[
+                    _tile('Student Index Number', _val(p['index_number'])),
+                    _tile(
+                      'Academic Level',
+                      p['level'] != null && p['level'].toString().isNotEmpty
+                          ? 'Level ${p['level']}'
+                          : 'Level Not set',
+                    ),
+                    _tile('Specialization', _val(p['specialization'])),
+                    _tile('Gender', _val(p['gender'])),
+                    _tile('Date of Birth (Encrypted)', _sensitiveVal(p['dob'])),
+                    _tile('Phone Number (Encrypted)', _sensitiveVal(p['phone'])),
+                    _tile(
+                      'Hostel / Residence (Encrypted)',
+                      _sensitiveVal(p['hostel']),
+                    ),
+                    _tile(
+                      'Guardian Emergency Contact (Encrypted)',
+                      _sensitiveVal(p['emergency_contact']),
+                    ),
+                  ] else ...[
+                    _tile('Staff ID', _val(p['staff_id'])),
+                    _tile('Academic Title', _val(p['academic_title'])),
+                    _tile('Specialization', _val(p['specialization'])),
+                    _tile('Office Hours', _val(p['office_hours'])),
+                    _tile('Gender', _val(p['gender'])),
+                    _tile('Date of Birth (Encrypted)', _sensitiveVal(p['dob'])),
+                    _tile('Phone Number (Encrypted)', _sensitiveVal(p['phone'])),
+                    _tile(
+                      'Office Line (Encrypted)',
+                      _sensitiveVal(p['office_line']),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: _editProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: EleesaColors.deepNavy,
+                      foregroundColor: EleesaColors.electricCyan,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Edit Encrypted Profile',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
@@ -154,17 +231,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          Flexible(
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
             child: Text(
               value,
               textAlign: TextAlign.end,
