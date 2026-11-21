@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 class ProfileService {
   static const String baseUrl = 'https://eleesa-backend.onrender.com/api';
 
-  Future<Map<String, dynamic>> fetchProfile(String email) async {
+  Future> fetchProfile(String email) async {
     final uri = Uri.parse('$baseUrl/profile?email=${Uri.encodeComponent(email)}');
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -45,7 +45,39 @@ class ProfileService {
     }
   }
 
-  Future<Map<String, dynamic>> fetchStudentsByLevel(String requesterEmail) async {
+  Future<String> uploadAvatar({
+    required String email,
+    required String avatarData,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/profile/avatar'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email,
+            'avatar_data': avatarData,
+          }),
+        )
+        .timeout(const Duration(seconds: 60));
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return (data['avatar_data'] ?? avatarData).toString();
+    }
+    throw Exception(data['message'] ?? 'Failed to update profile picture');
+  }
+
+  Future> fetchVisitorHub() async {
+    final uri = Uri.parse('$baseUrl/public/visitor-hub');
+    final response = await http.get(uri).timeout(const Duration(seconds: 60));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data;
+    }
+    throw Exception(data['message'] ?? 'Failed to load visitor portal');
+  }
+
+  Future> fetchStudentsByLevel(String requesterEmail) async {
     final uri = Uri.parse(
       '$baseUrl/hub/students-by-level?requester_email=${Uri.encodeComponent(requesterEmail)}',
     );
@@ -57,14 +89,14 @@ class ProfileService {
     throw Exception(data['message'] ?? 'Failed to load 4-level student database');
   }
 
-  Future<List<Map<String, dynamic>>> fetchStaffDirectory(String requesterEmail) async {
+  Future<List>> fetchStaffDirectory(String requesterEmail) async {
     final uri = Uri.parse(
       '$baseUrl/hub/staff-directory?requester_email=${Uri.encodeComponent(requesterEmail)}',
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return List<Map<String, dynamic>>.from(data['staff'] ?? []);
+      return List>.from(data['staff'] ?? []);
     }
     throw Exception(data['message'] ?? 'Failed to load staff directory');
   }

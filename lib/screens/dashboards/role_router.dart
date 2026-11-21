@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../models/user_model.dart';
 import '../../services/profile_service.dart';
+import '../../theme/theme_controller.dart';
 import '../../widgets/electric_ui.dart';
 import '../../widgets/profile_onboarding_dialog.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
+import '../settings/settings_screen.dart';
+import '../visitor/visitor_portal_screen.dart';
 
 class RoleBasedDashboard extends StatefulWidget {
   final EleesaUser user;
@@ -16,6 +19,7 @@ class RoleBasedDashboard extends StatefulWidget {
 
 class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   final _profileService = ProfileService();
+  int _bottomTab = 0;
   Map<String, dynamic>? _profile;
   Map<String, dynamic> _studentsByLevel = {
     '100': [],
@@ -30,7 +34,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     '400': 0,
     'total': 0,
   };
-  List<Map<String, dynamic>> _staffDirectory = [];
+  List> _staffDirectory = [];
   String _selectedLevelTab = '100';
   String _searchQuery = '';
   bool _loading = true;
@@ -43,6 +47,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
 
   bool get _isStudent => _roleKey == 'student' || _roleKey == 'executive';
   bool get _isHod => _roleKey == 'hod_admin';
+  bool get _isStaff => !_isStudent;
 
   @override
   void initState() {
@@ -54,87 +59,67 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     setState(() => _loading = true);
     try {
       final res = await _profileService.fetchProfile(widget.user.email);
-      final userData = res['user'];
-      final prof = res['profile'];
-      final completed = (userData is Map && userData['profile_completed'] == true) ||
-          prof is Map;
+      final userMap = res['user'] as Map<String, dynamic>? ?? {};
+      final profMap = res['profile'] as Map<String, dynamic>?;
+      final completed = userMap['profile_completed'] == true;
 
-      if (mounted) {
-        setState(() {
-          _profile = prof is Map<String, dynamic>
-              ? prof
-              : (prof is Map ? Map<String, dynamic>.from(prof) : null);
+      if (!mounted) return;
+      setState(() => _profile = profMap);
+
+      if (!completed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          final saved = await showProfileOnboardingPopup(
+            context: context,
+            email: widget.user.email,
+            initialFullName: widget.user.fullName,
+            roleKey: _roleKey,
+            isMandatory: true,
+          );
+          if (saved && mounted) {
+            _initHub();
+          }
         });
       }
 
-      if (!completed && mounted) {
-        await showProfileOnboardingPopup(
-          context: context,
-          email: widget.user.email,
-          initialFullName: widget.user.fullName,
-          roleKey: _roleKey,
-          isMandatory: true,
-        );
-        final refreshed = await _profileService.fetchProfile(widget.user.email);
-        final refreshedProf = refreshed['profile'];
-        if (mounted) {
-          setState(() {
-            _profile = refreshedProf is Map<String, dynamic>
-                ? refreshedProf
-                : (refreshedProf is Map
-                    ? Map<String, dynamic>.from(refreshedProf)
-                    : null);
-          });
-        }
-      }
-
-      if (!_isStudent) {
-        final levelData =
+      if (_isStaff) {
+        final grid =
             await _profileService.fetchStudentsByLevel(widget.user.email);
-        final rawCounts = levelData['counts'];
-        final countsMap = rawCounts is Map ? rawCounts : {};
-        final rawLevels = levelData['levels'];
-        if (mounted) {
-          setState(() {
-            if (rawLevels is Map<String, dynamic>) {
-              _studentsByLevel = rawLevels;
-            } else if (rawLevels is Map) {
-              _studentsByLevel = Map<String, dynamic>.from(rawLevels);
-            }
-            _levelCounts = {
-              '100': int.tryParse('${countsMap['100'] ?? 0}') ?? 0,
-              '200': int.tryParse('${countsMap['200'] ?? 0}') ?? 0,
-              '300': int.tryParse('${countsMap['300'] ?? 0}') ?? 0,
-              '400': int.tryParse('${countsMap['400'] ?? 0}') ?? 0,
-              'total': int.tryParse('${countsMap['total'] ?? 0}') ?? 0,
-            };
-          });
-        }
+        final rawLevels = Map<String, dynamic>.from(grid['levels'] ?? {});
+        final rawCounts = Map<String, dynamic>.from(grid['counts'] ?? {});
+        List> staff = [];
         if (_isHod) {
-          final staff =
-              await _profileService.fetchStaffDirectory(widget.user.email);
-          if (mounted) setState(() => _staffDirectory = staff);
+          staff = await _profileService.fetchStaffDirectory(widget.user.email);
         }
+        if (!mounted) return;
+        setState(() {
+          _studentsByLevel = rawLevels;
+          _levelCounts = {
+            '100': (rawCounts['100'] ?? 0) as int,
+            '200': (rawCounts['200'] ?? 0) as int,
+            '300': (rawCounts['300'] ?? 0) as int,
+            '400': (rawCounts['400'] ?? 0) as int,
+            'total': (rawCounts['total'] ?? 0) as int,
+          };
+          _staffDirectory = staff;
+        });
       }
-    } catch (_) {
-      // Keep UI responsive on offline retry
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _openProfile() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProfileScreen(
-          email: widget.user.email,
-          fullName: (_profile?['full_name'] ?? widget.user.fullName).toString(),
-          roleKey: _roleKey,
-        ),
-      ),
-    );
-    _initHub();
+  Future<void> _openProfile() async {
+    setState(() => _bottomTab = 4);
   }
 
   void _logout() {
@@ -145,51 +130,493 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     );
   }
 
+  void _showModuleWaveNotice(String moduleName, String waveTag) {
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$moduleName is queued for $waveTag rollout.'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final appBarColor = _isStudent
-        ? EleesaColors.deepNavy
-        : (_isHod ? const Color(0xFF050B14) : const Color(0xFF111827));
-    final hubTitle = _isStudent
-        ? 'ELEESA Student Hub'
-        : (_isHod ? 'ELEESA HoD Control Room' : 'ELEESA Lecturer Hub');
+    return AnimatedBuilder(
+      animation: eleesaTheme,
+      builder: (context, _) {
+        final p = eleesaTheme.paletteForRole(_roleKey);
+        final displayName =
+            (_profile?['full_name'] ?? widget.user.fullName).toString();
+        final hubSubtitle = _isStudent
+            ? 'STUDENT HUB \u2022 LEVEL ${_profile?['level'] ?? '---'}'
+            : (_isHod ? 'HOD CONTROL ROOM' : 'LECTURER BUSBAR');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(hubTitle),
-        backgroundColor: appBarColor,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Refresh Grid',
-            icon: const Icon(Icons.refresh),
-            onPressed: _initHub,
+        return Scaffold(
+          backgroundColor: p.canvas,
+          appBar: AppBar(
+            backgroundColor: p.surface,
+            foregroundColor: p.textPrimary,
+            titleSpacing: 4,
+            title: Row(
+              children: [
+                EleesaCrestLogo(size: 32, accent: p.accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ELEESA Hub',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.bold,
+                          color: p.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        hubSubtitle,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w800,
+                          color: p.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Toggle Theme',
+                icon: Icon(
+                  p.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  color: p.accent,
+                ),
+                onPressed: eleesaTheme.toggleTheme,
+              ),
+              IconButton(
+                tooltip: 'Refresh Grid',
+                icon: Icon(Icons.refresh, color: p.textSecondary),
+                onPressed: _initHub,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: GestureDetector(
+                  onTap: () => setState(() => _bottomTab = 4),
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: p.accent.withValues(alpha: 0.2),
+                    child: Text(
+                      displayName.isNotEmpty
+                          ? displayName[0].toUpperCase()
+                          : 'E',
+                      style: TextStyle(
+                        color: p.accent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
+          drawer: _buildCategorizedDrawer(p, displayName),
+          body: _buildBodyForTab(p),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: p.border, width: 1)),
+            ),
+            child: NavigationBar(
+              backgroundColor: p.surface,
+              indicatorColor: p.accent.withValues(alpha: 0.18),
+              selectedIndex: _bottomTab,
+              onDestinationSelected: (idx) => setState(() => _bottomTab = idx),
+              destinations: [
+                NavigationDestination(
+                  icon: Icon(Icons.bolt_outlined, color: p.textSecondary),
+                  selectedIcon: Icon(Icons.bolt, color: p.accent),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.menu_book_outlined, color: p.textSecondary),
+                  selectedIcon: Icon(Icons.menu_book, color: p.accent),
+                  label: 'Academics',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.groups_outlined, color: p.textSecondary),
+                  selectedIcon: Icon(Icons.groups, color: p.accent),
+                  label: 'People',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.storefront_outlined, color: p.textSecondary),
+                  selectedIcon: Icon(Icons.storefront, color: p.accent),
+                  label: 'Store',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.shield_outlined, color: p.textSecondary),
+                  selectedIcon: Icon(Icons.shield, color: p.accent),
+                  label: 'My Vault',
+                ),
+              ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBodyForTab(EleesaPalette p) {
+    if (_bottomTab == 4) {
+      return ProfileScreen(
+        email: widget.user.email,
+        fullName: (_profile?['full_name'] ?? widget.user.fullName).toString(),
+        roleKey: _roleKey,
+        embedded: true,
+      );
+    }
+
+    if (_bottomTab == 1) {
+      return _buildWavePreviewPage(
+        p,
+        kicker: 'ACADEMIC COMMAND',
+        title: 'Courses, Timetables, Library & Labs',
+        description:
+            'Wave 2 & Wave 3 will populate your Level 100\u2013400 courses, lecture & exam timetables, past questions, and 5-lab equipment bookings here.',
+        items: const [
+          'Courses & Curriculum (Codes, Credits, Syllabi & Lecturers)',
+          'Lecture & Exam Timetables + Academic Calendar',
+          'Resource Library (Slides, Past Questions & Student Uploads)',
+          'Labs & Equipment (Machines, Power, Electronics, Control, Comms)',
+        ],
+      );
+    }
+
+    if (_bottomTab == 2) {
+      return _buildWavePreviewPage(
+        p,
+        kicker: 'COMMUNITY DIRECTORY \u2022 ITEM #17',
+        title: 'Know Your People',
+        description:
+            'Connect with every ELEESA student who has logged in and updated their profile. Your sensitive vault fields remain AES-256-GCM encrypted.',
+        items: const [
+          'Browse classmates by Level 100, 200, 300 & 400',
+          'View profile photos, specialization tracks & student bios',
+          'Toggle your directory visibility anytime inside Settings',
+        ],
+      );
+    }
+
+    if (_bottomTab == 3) {
+      return _buildWavePreviewPage(
+        p,
+        kicker: 'PEER MARKETPLACE \u2022 ITEM #15',
+        title: 'ELEESA Store (Jiji-Style Campus Market)',
+        description:
+            'Buy and sell engineering components, Arduino/ESP32 kits, textbooks, calculators, and hostel essentials directly with ELEESA peers.',
+        items: const [
+          'Post products with photos, price & condition',
+          'Filter listings by category and contact sellers directly',
+          'HoD & Executive moderation for verified campus listings',
+        ],
+      );
+    }
+
+    // Tab 0: Home Role Hub
+    if (_loading) {
+      return Center(child: CircularProgressIndicator(color: p.accent));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _initHub,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_isStudent) _buildStudentHub(p),
+          if (!_isStudent && !_isHod) _buildLecturerHub(p),
+          if (_isHod) _buildHodHub(p),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _initHub,
-              child: ListView(
-                padding: const EdgeInsets.all(18),
+    );
+  }
+
+  Widget _buildWavePreviewPage(
+    EleesaPalette p, {
+    required String kicker,
+    required String title,
+    required String description,
+    required List<String> items,
+  }) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: p.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                kicker,
+                style: TextStyle(
+                  color: p.accent,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              AnimatedCircuitStrip(accent: p.accent, height: 22),
+              const SizedBox(height: 10),
+              Text(
+                description,
+                style: TextStyle(
+                  color: p.textSecondary,
+                  fontSize: 13.5,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 14),
+              for (final item in items)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.bolt, size: 16, color: p.accent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: TextStyle(color: p.textPrimary, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- CATEGORIZED NAVIGATION DRAWER (Item #11 & #13) ---
+  Widget _buildCategorizedDrawer(EleesaPalette p, String displayName) {
+    return Drawer(
+      backgroundColor: p.surface,
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: p.canvas,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: p.border),
+              ),
+              child: Row(
                 children: [
-                  if (_isStudent) _buildStudentHub(),
-                  if (!_isStudent && !_isHod) _buildLecturerHub(),
-                  if (_isHod) _buildHodHub(),
+                  EleesaCrestLogo(size: 38, accent: p.accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: p.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _roleKey.toUpperCase(),
+                          style: TextStyle(
+                            color: p.accent,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 14),
+            _drawerCategory(p, 'COMMAND & SCHEDULE'),
+            _drawerTile(p, Icons.dashboard_outlined, 'Home Dashboard', () {
+              Navigator.pop(context);
+              setState(() => _bottomTab = 0);
+            }),
+            _drawerTile(p, Icons.calendar_today_outlined, 'Timetable & Calendar', () {
+              _showModuleWaveNotice('Timetable & Academic Calendar', 'Wave 2');
+            }),
+            _drawerTile(p, Icons.account_tree_outlined, 'Courses & Curriculum', () {
+              _showModuleWaveNotice('Courses & Curriculum', 'Wave 2');
+            }),
+            _drawerTile(p, Icons.memory_outlined, 'Labs & Equipment', () {
+              _showModuleWaveNotice('Labs & Equipment', 'Wave 3');
+            }),
+
+            const SizedBox(height: 10),
+            _drawerCategory(p, 'STUDY & ENGINEERING'),
+            _drawerTile(p, Icons.folder_special_outlined, 'Resource Library & Uploads', () {
+              _showModuleWaveNotice('Resource Library & Uploads', 'Wave 3');
+            }),
+            _drawerTile(p, Icons.science_outlined, 'Projects & Research', () {
+              _showModuleWaveNotice('Projects & Research', 'Wave 3');
+            }),
+            _drawerTile(p, Icons.engineering_outlined, 'Industrial Attachment', () {
+              _showModuleWaveNotice('Industrial Attachment', 'Wave 3');
+            }),
+            _drawerTile(p, Icons.calculate_outlined, 'EEE Tools & CGPA Calc', () {
+              _showModuleWaveNotice('Engineering Tools & CGPA', 'Wave 5');
+            }),
+            _drawerTile(p, Icons.description_outlined, 'Forms & Downloads', () {
+              _showModuleWaveNotice('Forms & Downloads', 'Wave 5');
+            }),
+
+            const SizedBox(height: 10),
+            _drawerCategory(p, 'COMMUNITY & MARKET'),
+            _drawerTile(p, Icons.campaign_outlined, 'Notices & IEEE/GhIE Events', () {
+              _showModuleWaveNotice('Notices & Events', 'Wave 4');
+            }),
+            _drawerTile(p, Icons.people_alt_outlined, 'Know Your People', () {
+              Navigator.pop(context);
+              setState(() => _bottomTab = 2);
+            }),
+            _drawerTile(p, Icons.storefront_outlined, 'ELEESA Store (Jiji Market)', () {
+              Navigator.pop(context);
+              setState(() => _bottomTab = 3);
+            }),
+            _drawerTile(p, Icons.work_outline, 'Alumni & Careers', () {
+              _showModuleWaveNotice('Alumni & Careers', 'Wave 5');
+            }),
+            _drawerTile(p, Icons.support_agent_outlined, 'Feedback & Help Desk', () {
+              _showModuleWaveNotice('Feedback & Help Desk', 'Wave 5');
+            }),
+
+            const SizedBox(height: 10),
+            _drawerCategory(p, 'DEPARTMENT & ACCOUNT'),
+            _drawerTile(p, Icons.info_outline, 'About the Department', () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const VisitorPortalScreen(
+                    initialTab: 0,
+                    isAuthenticatedViewer: true,
+                  ),
+                ),
+              );
+            }),
+            _drawerTile(p, Icons.badge_outlined, 'Staff Directory', () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const VisitorPortalScreen(
+                    initialTab: 2,
+                    isAuthenticatedViewer: true,
+                  ),
+                ),
+              );
+            }),
+            if (_isStaff)
+              _drawerTile(
+                p,
+                Icons.admin_panel_settings_outlined,
+                'Staff-Only Grid Tools',
+                () {
+                  Navigator.pop(context);
+                  setState(() => _bottomTab = 0);
+                },
+              ),
+            _drawerTile(p, Icons.shield_outlined, 'My Encrypted Vault & Photo', () {
+              Navigator.pop(context);
+              setState(() => _bottomTab = 4);
+            }),
+            _drawerTile(p, Icons.settings_outlined, 'Settings & Theme', () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(
+                    email: widget.user.email,
+                    fullName: displayName,
+                    roleKey: _roleKey,
+                    onLogout: _logout,
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerCategory(EleesaPalette p, String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: p.accent,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerTile(
+    EleesaPalette p,
+    IconData icon,
+    String title,
+    VoidCallback onTap,
+  ) {
+    return ListTile(
+      dense: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      leading: Icon(icon, size: 20, color: p.textSecondary),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: p.textPrimary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 
   // --- HUB 1: STUDENT OSCILLOSCOPE TELEMETRY DECK ---
-  Widget _buildStudentHub() {
+  Widget _buildStudentHub(EleesaPalette palette) {
     final p = _profile ?? {};
     final level = (p['level'] ?? '---').toString();
     return Column(
@@ -201,25 +628,55 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           indexNumber: (p['index_number'] ?? '').toString(),
           onProfileTap: _openProfile,
         ),
-        const SizedBox(height: 18),
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: EleesaColors.deepNavy,
-              child: Icon(Icons.security, color: EleesaColors.electricCyan),
-            ),
-            title: Text(
-              'Assigned Database Table: level_${level}_students',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-            ),
-            subtitle: Text(
-              'Track: ${p['specialization'] ?? 'Electrical & Electronic Engineering'}',
-            ),
-            trailing: TextButton(
-              onPressed: _openProfile,
-              child: const Text('Edit'),
-            ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: palette.border),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: palette.accent.withValues(alpha: 0.16),
+                child: Icon(Icons.security, color: palette.accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assigned Table: level_${level}_students',
+                      style: TextStyle(
+                        color: palette.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Track: ${p['specialization'] ?? 'Electrical & Electronic Engineering'}',
+                      style: TextStyle(
+                        color: palette.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _openProfile,
+                child: Text(
+                  'Vault',
+                  style: TextStyle(
+                    color: palette.accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -227,7 +684,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   }
 
   // --- HUB 2: LECTURER 3-PHASE BUSBAR & 4-LEVEL STUDENT REGISTRY ---
-  Widget _buildLecturerHub() {
+  Widget _buildLecturerHub(EleesaPalette palette) {
     final p = _profile ?? {};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -235,18 +692,21 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
         LecturerBusbarHeader(
           lecturerName: (p['full_name'] ?? widget.user.fullName).toString(),
           titleAndSpec:
-              '${p['academic_title'] ?? 'Lecturer'}  •  ${p['specialization'] ?? 'EEE Faculty'}',
+              '${p['academic_title'] ?? 'Lecturer'}  \u2022  ${p['specialization'] ?? 'EEE Faculty'}',
           totalStudents: _levelCounts['total'] ?? 0,
           onProfileTap: _openProfile,
         ),
-        const SizedBox(height: 18),
-        _buildFourLevelStudentInspector(accentColor: EleesaColors.highVoltageAmber),
+        const SizedBox(height: 16),
+        _buildFourLevelStudentInspector(
+          palette,
+          accentColor: EleesaColors.highVoltageAmber,
+        ),
       ],
     );
   }
 
   // --- HUB 3: HoD MAIN GRID CONTROL ROOM & STAFF DIRECTORY ---
-  Widget _buildHodHub() {
+  Widget _buildHodHub(EleesaPalette palette) {
     final p = _profile ?? {};
     const emerald = Color(0xFF10B981);
     return Column(
@@ -257,38 +717,57 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           levelCounts: _levelCounts,
           onProfileTap: _openProfile,
         ),
+        const SizedBox(height: 16),
+        _buildFourLevelStudentInspector(palette, accentColor: emerald),
         const SizedBox(height: 18),
-        _buildFourLevelStudentInspector(accentColor: emerald),
-        const SizedBox(height: 22),
-        const Text(
-          'Department Faculty & Staff Registry',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        Text(
+          'DEPARTMENT FACULTY & STAFF REGISTRY',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: palette.accent,
+          ),
         ),
         const SizedBox(height: 8),
         if (_staffDirectory.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No faculty profiles registered yet.'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: palette.border),
+            ),
+            child: Text(
+              'No staff profiles registered yet.',
+              style: TextStyle(color: palette.textSecondary),
             ),
           )
         else
           ..._staffDirectory.map(
-            (s) => Card(
-              margin: const EdgeInsets.only(bottom: 10),
+            (s) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: palette.border),
+              ),
               child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF063729),
-                  child: Icon(Icons.engineering, color: emerald),
+                leading: CircleAvatar(
+                  backgroundColor: emerald.withValues(alpha: 0.18),
+                  child: const Icon(Icons.school, color: emerald),
                 ),
                 title: Text(
-                  '${s['academic_title']} ${s['full_name']}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  '${s['academic_title'] ?? 'Staff'} ${s['full_name'] ?? ''}',
+                  style: TextStyle(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 subtitle: Text(
-                  'ID: ${s['staff_id']} • ${s['specialization']}\nPhone: ${s['phone']} • ${s['office_hours']}',
+                  'ID: ${s['staff_id']} \u2022 ${s['specialization']}\nPhone: ${s['phone']} \u2022 Hours: ${s['office_hours']}',
+                  style: TextStyle(color: palette.textSecondary, fontSize: 12),
                 ),
-                isThreeLine: true,
               ),
             ),
           ),
@@ -296,41 +775,65 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     );
   }
 
-  // --- SHARED 4-LEVEL STUDENT INSPECTOR FOR LECTURER & HoD HUBS ---
-  Widget _buildFourLevelStudentInspector({required Color accentColor}) {
-    final rawList = _studentsByLevel[_selectedLevelTab];
-    final items = rawList is Iterable ? rawList.toList() : [];
-    final list = items
-        .map((item) => item is Map<String, dynamic>
-            ? item
-            : (item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{}))
-        .where((s) {
-      if (_searchQuery.isEmpty) return true;
+  // --- SHARED 4-LEVEL STUDENT DATABASE VIEWER (STAFF-ONLY TOOL #13) ---
+  Widget _buildFourLevelStudentInspector(
+    EleesaPalette palette, {
+    required Color accentColor,
+  }) {
+    final rawList = List>.from(
+      _studentsByLevel[_selectedLevelTab] ?? [],
+    );
+    final filtered = rawList.where((st) {
+      if (_searchQuery.trim().isEmpty) return true;
       final q = _searchQuery.toLowerCase();
-      return s['full_name'].toString().toLowerCase().contains(q) ||
-          s['index_number'].toString().toLowerCase().contains(q);
+      return (st['full_name'] ?? '').toString().toLowerCase().contains(q) ||
+          (st['index_number'] ?? '').toString().toLowerCase().contains(q) ||
+          (st['specialization'] ?? '').toString().toLowerCase().contains(q);
     }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          '4-Level Student Database (Decrypted View)',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '4-LEVEL STUDENT DATABASE',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: accentColor,
+              ),
+            ),
+            Text(
+              'Table: level_${_selectedLevelTab}_students',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: palette.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         Row(
           children: ['100', '200', '300', '400'].map((lvl) {
             final selected = _selectedLevelTab == lvl;
+            final count = _levelCounts[lvl] ?? 0;
             return Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: ChoiceChip(
-                  label: Text('Lvl $lvl (${_levelCounts[lvl] ?? 0})'),
+                  label: Text('Lvl $lvl ($count)'),
                   selected: selected,
-                  selectedColor: EleesaColors.deepNavy,
+                  selectedColor: accentColor.withValues(alpha: 0.22),
+                  backgroundColor: palette.surface,
+                  side: BorderSide(
+                    color: selected ? accentColor : palette.border,
+                  ),
                   labelStyle: TextStyle(
-                    color: selected ? accentColor : Colors.black87,
+                    color: selected ? accentColor : palette.textSecondary,
                     fontWeight: FontWeight.bold,
                     fontSize: 11.5,
                   ),
@@ -342,68 +845,133 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
         ),
         const SizedBox(height: 10),
         TextField(
+          style: TextStyle(color: palette.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Search Level $_selectedLevelTab by name or index number...',
-            prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            isDense: true,
+            hintText: 'Search Level $_selectedLevelTab by name or index...',
+            hintStyle: TextStyle(color: palette.textSecondary, fontSize: 13),
+            prefixIcon: Icon(Icons.search, color: accentColor),
+            filled: true,
+            fillColor: palette.surface,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: palette.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: accentColor),
+            ),
           ),
-          onChanged: (v) => setState(() => _searchQuery = v.trim()),
+          onChanged: (v) => setState(() => _searchQuery = v),
         ),
-        const SizedBox(height: 12),
-        if (list.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Text(
-                'No students currently stored in level_${_selectedLevelTab}_students.',
-                textAlign: TextAlign.center,
-              ),
+        const SizedBox(height: 10),
+        if (filtered.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: palette.border),
+            ),
+            child: Text(
+              'No students recorded in level_${_selectedLevelTab}_students yet.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.textSecondary),
             ),
           )
         else
-          ...list.map(
-            (st) => Card(
+          ...filtered.map(
+            (st) => Container(
               margin: const EdgeInsets.only(bottom: 10),
-              shape: RoundedRectangleBorder(
+              decoration: BoxDecoration(
+                color: palette.surface,
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: palette.border),
               ),
               child: ExpansionTile(
+                iconColor: accentColor,
+                collapsedIconColor: palette.textSecondary,
                 leading: CircleAvatar(
-                  backgroundColor: EleesaColors.deepNavy,
+                  backgroundColor: accentColor.withValues(alpha: 0.18),
                   child: Text(
-                    st['level'].toString(),
+                    (st['full_name'] ?? 'S')
+                        .toString()
+                        .substring(0, 1)
+                        .toUpperCase(),
                     style: TextStyle(
                       color: accentColor,
-                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 title: Text(
-                  st['full_name'].toString(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  (st['full_name'] ?? '').toString(),
+                  style: TextStyle(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 subtitle: Text(
-                  'Index: ${st['index_number']}  •  ${st['specialization']}',
+                  'Index: ${st['index_number']}  \u2022  ${st['specialization']}',
+                  style: TextStyle(color: palette.textSecondary, fontSize: 12),
                 ),
                 childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '• Email: ${st['email']}\n'
-                      '• Gender: ${st['gender']}   |   DoB (Decrypted): ${st['dob']}\n'
-                      '• Phone: ${st['phone']}   |   Emergency: ${st['emergency_contact']}\n'
-                      '• Residence: ${st['hostel']}   |   Table: ${st['table_name']}',
-                      style: const TextStyle(fontSize: 12.5, height: 1.55),
-                    ),
+                  Divider(color: palette.border),
+                  _detailRow(palette, 'Email', (st['email'] ?? '').toString()),
+                  _detailRow(palette, 'Gender', (st['gender'] ?? '').toString()),
+                  _detailRow(
+                    palette,
+                    'Date of Birth (Decrypted)',
+                    (st['dob'] ?? '').toString(),
+                  ),
+                  _detailRow(
+                    palette,
+                    'Phone (Decrypted)',
+                    (st['phone'] ?? '').toString(),
+                  ),
+                  _detailRow(
+                    palette,
+                    'Hostel (Decrypted)',
+                    (st['hostel'] ?? '').toString(),
+                  ),
+                  _detailRow(
+                    palette,
+                    'Emergency Contact',
+                    (st['emergency_contact'] ?? '').toString(),
                   ),
                 ],
               ),
             ),
           ),
       ],
+    );
+  }
+
+  Widget _detailRow(EleesaPalette palette, String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: palette.textSecondary, fontSize: 12.5),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              val,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
