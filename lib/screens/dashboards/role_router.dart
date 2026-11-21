@@ -12,6 +12,7 @@ import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
 import '../wave3/wave3_hub_screen.dart';
 import '../wave4/wave4_community_hub.dart';
+import '../wave5/wave5_tools_hub.dart';
 
 class RoleBasedDashboard extends StatefulWidget {
   final EleesaUser user;
@@ -762,10 +763,12 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               _openWave3Section(p, displayName, 3);
             }),
             _drawerTile(p, Icons.calculate_outlined, 'EEE Tools & CGPA Calc', () {
-              _showModuleWaveNotice('Engineering Tools & CGPA', 'Wave 5');
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => Wave5ToolsHub(initialTabIndex: 0, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
             _drawerTile(p, Icons.description_outlined, 'Forms & Downloads', () {
-              _showModuleWaveNotice('Forms & Downloads', 'Wave 5');
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => Wave5ToolsHub(initialTabIndex: 1, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
 
             const SizedBox(height: 10),
@@ -787,7 +790,8 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => Wave4CommunityHub(initialTabIndex: 0, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
             _drawerTile(p, Icons.support_agent_outlined, 'Feedback & Help Desk', () {
-              _showModuleWaveNotice('Feedback & Help Desk', 'Wave 5');
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => Wave5ToolsHub(initialTabIndex: 2, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
 
             const SizedBox(height: 10),
