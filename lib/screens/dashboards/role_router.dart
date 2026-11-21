@@ -22,10 +22,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   int _bottomTab = 0;
   Map<String, dynamic>? _profile;
   Map<String, dynamic> _studentsByLevel = {
-    '100': [],
-    '200': [],
-    '300': [],
-    '400': [],
+    '100': <Map<String, dynamic>>[],
+    '200': <Map<String, dynamic>>[],
+    '300': <Map<String, dynamic>>[],
+    '400': <Map<String, dynamic>>[],
   };
   Map<String, int> _levelCounts = {
     '100': 0,
@@ -34,7 +34,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     '400': 0,
     'total': 0,
   };
-  List> _staffDirectory = [];
+  List<Map<String, dynamic>> _staffDirectory = [];
   String _selectedLevelTab = '100';
   String _searchQuery = '';
   bool _loading = true;
@@ -48,6 +48,12 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   bool get _isStudent => _roleKey == 'student' || _roleKey == 'executive';
   bool get _isHod => _roleKey == 'hod_admin';
   bool get _isStaff => !_isStudent;
+
+  /// Safe first-letter helper (avoids RangeError on empty strings).
+  String _initialOf(dynamic name, {String fallback = 'S'}) {
+    final s = (name ?? '').toString().trim();
+    return s.isEmpty ? fallback : s.substring(0, 1).toUpperCase();
+  }
 
   @override
   void initState() {
@@ -76,8 +82,8 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             roleKey: _roleKey,
             isMandatory: true,
           );
-          if (saved && mounted) {
-            _initHub();
+          if (saved == true && mounted) {
+            await _initHub();
           }
         });
       }
@@ -87,9 +93,13 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             await _profileService.fetchStudentsByLevel(widget.user.email);
         final rawLevels = Map<String, dynamic>.from(grid['levels'] ?? {});
         final rawCounts = Map<String, dynamic>.from(grid['counts'] ?? {});
-        List> staff = [];
+        List<Map<String, dynamic>> staff = [];
         if (_isHod) {
-          staff = await _profileService.fetchStaffDirectory(widget.user.email);
+          final rawStaff =
+              await _profileService.fetchStaffDirectory(widget.user.email);
+          staff = rawStaff
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
         }
         if (!mounted) return;
         setState(() {
@@ -209,9 +219,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                     radius: 16,
                     backgroundColor: p.accent.withValues(alpha: 0.2),
                     child: Text(
-                      displayName.isNotEmpty
-                          ? displayName[0].toUpperCase()
-                          : 'E',
+                      _initialOf(displayName, fallback: 'E'),
                       style: TextStyle(
                         color: p.accent,
                         fontWeight: FontWeight.bold,
@@ -780,9 +788,16 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     EleesaPalette palette, {
     required Color accentColor,
   }) {
-    final rawList = List>.from(
-      _studentsByLevel[_selectedLevelTab] ?? [],
-    );
+    final Object? rawEntry = _studentsByLevel[_selectedLevelTab];
+    final List<Map<String, dynamic>> rawList = <Map<String, dynamic>>[];
+    if (rawEntry is Iterable) {
+      for (final item in rawEntry) {
+        if (item is Map) {
+          rawList.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
+
     final filtered = rawList.where((st) {
       if (_searchQuery.trim().isEmpty) return true;
       final q = _searchQuery.toLowerCase();
@@ -894,10 +909,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 leading: CircleAvatar(
                   backgroundColor: accentColor.withValues(alpha: 0.18),
                   child: Text(
-                    (st['full_name'] ?? 'S')
-                        .toString()
-                        .substring(0, 1)
-                        .toUpperCase(),
+                    _initialOf(st['full_name']),
                     style: TextStyle(
                       color: accentColor,
                       fontWeight: FontWeight.bold,

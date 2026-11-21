@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../services/profile_service.dart';
 import '../../theme/theme_controller.dart';
 
+typedef JsonMap = Map<String, dynamic>;
+typedef JsonMapList = List<JsonMap>;
+
 class VisitorPortalScreen extends StatefulWidget {
   final int initialTab;
   final bool isAuthenticatedViewer;
@@ -21,14 +24,36 @@ class _VisitorPortalScreenState extends State<VisitorPortalScreen> {
   late int _selectedTab;
   bool _loading = true;
   String? _error;
-  Map<String, dynamic> _about = {};
-  List> _staff = [];
+  JsonMap _about = {};
+  JsonMapList _staff = [];
 
   @override
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab;
     _loadData();
+  }
+
+  JsonMapList _parseMapList(dynamic source) {
+    final result = <JsonMap>[];
+    if (source is Iterable) {
+      for (final item in source) {
+        if (item is Map) {
+          result.add(JsonMap.from(item));
+        }
+      }
+    }
+    return result;
+  }
+
+  List<String> _parseStringList(dynamic source) {
+    final result = <String>[];
+    if (source is Iterable) {
+      for (final item in source) {
+        result.add(item.toString());
+      }
+    }
+    return result;
   }
 
   Future<void> _loadData() async {
@@ -39,9 +64,10 @@ class _VisitorPortalScreenState extends State<VisitorPortalScreen> {
     try {
       final data = await _service.fetchVisitorHub();
       if (!mounted) return;
+      final rawAbout = data['about'];
       setState(() {
-        _about = Map<String, dynamic>.from(data['about'] ?? {});
-        _staff = List>.from(data['staff'] ?? []);
+        _about = rawAbout is Map ? JsonMap.from(rawAbout) : <String, dynamic>{};
+        _staff = _parseMapList(data['staff']);
       });
     } catch (e) {
       if (!mounted) return;
@@ -241,14 +267,15 @@ class _VisitorPortalScreenState extends State<VisitorPortalScreen> {
           p,
           kicker: 'CAMPUS LOCATION & HOURS',
           title: (_about['location'] ?? 'Faculty of Engineering Block').toString(),
-          body: 'Office Hours: ${_about['office_hours'] ?? 'Mon - Fri, 8:00 AM - 5:00 PM'}',
+          body:
+              'Office Hours: ${_about['office_hours'] ?? 'Mon - Fri, 8:00 AM - 5:00 PM'}',
         ),
       ],
     );
   }
 
   Widget _buildProgramsTab(EleesaPalette p) {
-    final programs = List>.from(_about['programs'] ?? []);
+    final programs = _parseMapList(_about['programs']);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -265,7 +292,8 @@ class _VisitorPortalScreenState extends State<VisitorPortalScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: p.accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -300,7 +328,7 @@ class _VisitorPortalScreenState extends State<VisitorPortalScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                for (final track in List<String>.from(prog['tracks'] ?? []))
+                for (final track in _parseStringList(prog['tracks']))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 5),
                     child: Row(

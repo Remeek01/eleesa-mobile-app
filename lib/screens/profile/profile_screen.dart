@@ -83,7 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : 'preset:cyan';
     bool saving = false;
 
-    final presets = >[
+    final presets = [
       {'id': 'preset:cyan', 'label': 'Cyan Pulse', 'color': const Color(0xFF00E5FF)},
       {'id': 'preset:amber', 'label': '3-Phase Amber', 'color': const Color(0xFFF59E0B)},
       {'id': 'preset:emerald', 'label': 'Grid Emerald', 'color': const Color(0xFF10B981)},

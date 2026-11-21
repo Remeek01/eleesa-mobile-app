@@ -2,13 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+typedef JsonMap = Map<String, dynamic>;
+typedef JsonMapList = List<JsonMap>;
+
 class ProfileService {
   static const String baseUrl = 'https://eleesa-backend.onrender.com/api';
 
-  Future> fetchProfile(String email) async {
+  Future<JsonMap> fetchProfile(String email) async {
     final uri = Uri.parse('$baseUrl/profile?email=${Uri.encodeComponent(email)}');
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as JsonMap;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
@@ -16,7 +19,7 @@ class ProfileService {
   }
 
   Future<String> saveProfile({
-    required Map<String, dynamic> payload,
+    required JsonMap payload,
     void Function(String status)? onStatusChange,
   }) async {
     Timer? wakeupTimer;
@@ -35,9 +38,9 @@ class ProfileService {
           )
           .timeout(const Duration(seconds: 60));
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(response.body) as JsonMap;
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return data['message'] ?? 'Profile saved.';
+        return (data['message'] ?? 'Profile saved.').toString();
       }
       throw Exception(data['message'] ?? 'Failed to save profile');
     } finally {
@@ -60,43 +63,52 @@ class ProfileService {
         )
         .timeout(const Duration(seconds: 60));
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as JsonMap;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return (data['avatar_data'] ?? avatarData).toString();
     }
     throw Exception(data['message'] ?? 'Failed to update profile picture');
   }
 
-  Future> fetchVisitorHub() async {
+  Future<JsonMap> fetchVisitorHub() async {
     final uri = Uri.parse('$baseUrl/public/visitor-hub');
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as JsonMap;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
     throw Exception(data['message'] ?? 'Failed to load visitor portal');
   }
 
-  Future> fetchStudentsByLevel(String requesterEmail) async {
+  Future<JsonMap> fetchStudentsByLevel(String requesterEmail) async {
     final uri = Uri.parse(
       '$baseUrl/hub/students-by-level?requester_email=${Uri.encodeComponent(requesterEmail)}',
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as JsonMap;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
     throw Exception(data['message'] ?? 'Failed to load 4-level student database');
   }
 
-  Future<List>> fetchStaffDirectory(String requesterEmail) async {
+  Future<JsonMapList> fetchStaffDirectory(String requesterEmail) async {
     final uri = Uri.parse(
       '$baseUrl/hub/staff-directory?requester_email=${Uri.encodeComponent(requesterEmail)}',
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 60));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = jsonDecode(response.body) as JsonMap;
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return List>.from(data['staff'] ?? []);
+      final rawStaff = data['staff'];
+      final staffList = <JsonMap>[];
+      if (rawStaff is Iterable) {
+        for (final item in rawStaff) {
+          if (item is Map) {
+            staffList.add(JsonMap.from(item));
+          }
+        }
+      }
+      return staffList;
     }
     throw Exception(data['message'] ?? 'Failed to load staff directory');
   }
