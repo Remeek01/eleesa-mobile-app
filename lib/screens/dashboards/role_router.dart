@@ -11,6 +11,7 @@ import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
 import '../wave3/wave3_hub_screen.dart';
+import '../wave4/wave4_community_hub.dart';
 
 class RoleBasedDashboard extends StatefulWidget {
   final EleesaUser user;
@@ -315,32 +316,26 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     }
 
     if (_bottomTab == 2) {
-      return _buildWavePreviewPage(
-        p,
-        kicker: 'COMMUNITY DIRECTORY \u2022 ITEM #17',
-        title: 'Know Your People',
-        description:
-            'Connect with every ELEESA student who has logged in and updated their profile. Your sensitive vault fields remain AES-256-GCM encrypted.',
-        items: const [
-          'Browse classmates by Level 100, 200, 300 & 400',
-          'View profile photos, specialization tracks & student bios',
-          'Toggle your directory visibility anytime inside Settings',
-        ],
+      return Wave4CommunityHub(
+        key: const ValueKey('wave4_people'),
+        initialTabIndex: 0,
+        embeddedInBottomNav: true,
+        userRole: _roleKey,
+        userName: displayName,
+        userLevel: (_profile?['level'] ?? '300').toString(),
+        accentColor: p.accent,
       );
     }
 
     if (_bottomTab == 3) {
-      return _buildWavePreviewPage(
-        p,
-        kicker: 'PEER MARKETPLACE \u2022 ITEM #15',
-        title: 'ELEESA Store (Jiji-Style Campus Market)',
-        description:
-            'Buy and sell engineering components, Arduino/ESP32 kits, textbooks, calculators, and hostel essentials directly with ELEESA peers.',
-        items: const [
-          'Post products with photos, price & condition',
-          'Filter listings by category and contact sellers directly',
-          'HoD & Executive moderation for verified campus listings',
-        ],
+      return Wave4CommunityHub(
+        key: const ValueKey('wave4_store'),
+        initialTabIndex: 1,
+        embeddedInBottomNav: true,
+        userRole: _roleKey,
+        userName: displayName,
+        userLevel: (_profile?['level'] ?? '300').toString(),
+        accentColor: p.accent,
       );
     }
 
@@ -776,7 +771,8 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             const SizedBox(height: 10),
             _drawerCategory(p, 'COMMUNITY & MARKET'),
             _drawerTile(p, Icons.campaign_outlined, 'Notices & IEEE/GhIE Events', () {
-              _showModuleWaveNotice('Notices & Events', 'Wave 4');
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => Wave4CommunityHub(initialTabIndex: 2, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
             _drawerTile(p, Icons.people_alt_outlined, 'Know Your People', () {
               Navigator.pop(context);
@@ -787,7 +783,8 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               setState(() => _bottomTab = 3);
             }),
             _drawerTile(p, Icons.work_outline, 'Alumni & Careers', () {
-              _showModuleWaveNotice('Alumni & Careers', 'Wave 5');
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => Wave4CommunityHub(initialTabIndex: 0, userRole: _roleKey, userName: displayName, userLevel: (_profile?['level'] ?? '300').toString(), accentColor: p.accent)));
             }),
             _drawerTile(p, Icons.support_agent_outlined, 'Feedback & Help Desk', () {
               _showModuleWaveNotice('Feedback & Help Desk', 'Wave 5');
