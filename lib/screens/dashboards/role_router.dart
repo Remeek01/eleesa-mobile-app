@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../models/user_model.dart';
+import '../../services/academic_service.dart';
 import '../../services/profile_service.dart';
 import '../../theme/theme_controller.dart';
 import '../../widgets/electric_ui.dart';
 import '../../widgets/profile_onboarding_dialog.dart';
+import '../academic/academic_hub_screen.dart';
+import '../academic/department_directory_screen.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
-import '../visitor/visitor_portal_screen.dart';
 
 class RoleBasedDashboard extends StatefulWidget {
   final EleesaUser user;
@@ -19,13 +21,20 @@ class RoleBasedDashboard extends StatefulWidget {
 
 class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   final _profileService = ProfileService();
+  final _academicService = AcademicService();
   int _bottomTab = 0;
+  int _academicInitialTab = 0;
+
   Map<String, dynamic>? _profile;
+  List<Map<String, dynamic>> _todaySchedule = [];
+  List<Map<String, dynamic>> _calendarHighlights = [];
+  int _totalCourses = 0;
+
   Map<String, dynamic> _studentsByLevel = {
-    '100': <Map<String, dynamic>>[],
-    '200': <Map<String, dynamic>>[],
-    '300': <Map<String, dynamic>>[],
-    '400': <Map<String, dynamic>>[],
+    '100': [],
+    '200': [],
+    '300': [],
+    '400': [],
   };
   Map<String, int> _levelCounts = {
     '100': 0,
@@ -49,12 +58,6 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   bool get _isHod => _roleKey == 'hod_admin';
   bool get _isStaff => !_isStudent;
 
-  /// Safe first-letter helper (avoids RangeError on empty strings).
-  String _initialOf(dynamic name, {String fallback = 'S'}) {
-    final s = (name ?? '').toString().trim();
-    return s.isEmpty ? fallback : s.substring(0, 1).toUpperCase();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -68,9 +71,20 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
       final userMap = res['user'] as Map<String, dynamic>? ?? {};
       final profMap = res['profile'] as Map<String, dynamic>?;
       final completed = userMap['profile_completed'] == true;
+      final userLevel = (profMap?['level'] ?? userMap['level'] ?? '300').toString();
+
+      final ov = await _academicService.fetchOverview(
+        email: widget.user.email,
+        level: _isStudent ? userLevel : 'ALL',
+      );
 
       if (!mounted) return;
-      setState(() => _profile = profMap);
+      setState(() {
+        _profile = profMap;
+        _todaySchedule = List<Map<String, dynamic>>.from(ov['schedule'] ?? []);
+        _calendarHighlights = List<Map<String, dynamic>>.from(ov['calendar'] ?? []);
+        _totalCourses = (ov['course_count'] ?? 0) as int;
+      });
 
       if (!completed) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -83,7 +97,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             isMandatory: true,
           );
           if (saved == true && mounted) {
-            await _initHub();
+            _initHub();
           }
         });
       }
@@ -95,11 +109,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
         final rawCounts = Map<String, dynamic>.from(grid['counts'] ?? {});
         List<Map<String, dynamic>> staff = [];
         if (_isHod) {
-          final rawStaff =
-              await _profileService.fetchStaffDirectory(widget.user.email);
-          staff = rawStaff
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList();
+          staff = await _profileService.fetchStaffDirectory(widget.user.email);
         }
         if (!mounted) return;
         setState(() {
@@ -128,8 +138,11 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     }
   }
 
-  Future<void> _openProfile() async {
-    setState(() => _bottomTab = 4);
+  void _openAcademicSection(int subTab) {
+    setState(() {
+      _academicInitialTab = subTab;
+      _bottomTab = 1;
+    });
   }
 
   void _logout() {
@@ -219,7 +232,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                     radius: 16,
                     backgroundColor: p.accent.withValues(alpha: 0.2),
                     child: Text(
-                      _initialOf(displayName, fallback: 'E'),
+                      displayName.isNotEmpty
+                          ? displayName[0].toUpperCase()
+                          : 'E',
                       style: TextStyle(
                         color: p.accent,
                         fontWeight: FontWeight.bold,
@@ -232,7 +247,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
             ],
           ),
           drawer: _buildCategorizedDrawer(p, displayName),
-          body: _buildBodyForTab(p),
+          body: _buildBodyForTab(p, displayName),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: p.border, width: 1)),
@@ -276,29 +291,25 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     );
   }
 
-  Widget _buildBodyForTab(EleesaPalette p) {
+  Widget _buildBodyForTab(EleesaPalette p, String displayName) {
     if (_bottomTab == 4) {
       return ProfileScreen(
         email: widget.user.email,
-        fullName: (_profile?['full_name'] ?? widget.user.fullName).toString(),
+        fullName: displayName,
         roleKey: _roleKey,
         embedded: true,
       );
     }
 
     if (_bottomTab == 1) {
-      return _buildWavePreviewPage(
-        p,
-        kicker: 'ACADEMIC COMMAND',
-        title: 'Courses, Timetables, Library & Labs',
-        description:
-            'Wave 2 & Wave 3 will populate your Level 100\u2013400 courses, lecture & exam timetables, past questions, and 5-lab equipment bookings here.',
-        items: const [
-          'Courses & Curriculum (Codes, Credits, Syllabi & Lecturers)',
-          'Lecture & Exam Timetables + Academic Calendar',
-          'Resource Library (Slides, Past Questions & Student Uploads)',
-          'Labs & Equipment (Machines, Power, Electronics, Control, Comms)',
-        ],
+      return AcademicHubScreen(
+        key: ValueKey('acad_$_academicInitialTab'),
+        email: widget.user.email,
+        fullName: displayName,
+        roleKey: _roleKey,
+        userLevel: (_profile?['level'] ?? '100').toString(),
+        initialTab: _academicInitialTab,
+        embedded: true,
       );
     }
 
@@ -332,7 +343,6 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
       );
     }
 
-    // Tab 0: Home Role Hub
     if (_loading) {
       return Center(child: CircularProgressIndicator(color: p.accent));
     }
@@ -345,7 +355,242 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           if (_isStudent) _buildStudentHub(p),
           if (!_isStudent && !_isHod) _buildLecturerHub(p),
           if (_isHod) _buildHodHub(p),
+          const SizedBox(height: 16),
+          _buildDashboardAcademicWidgets(p),
         ],
+      ),
+    );
+  }
+
+  // --- SHARED HOME DASHBOARD WIDGETS (Item #1: Quick Links, Schedule & Calendar) ---
+  Widget _buildDashboardAcademicWidgets(EleesaPalette p) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'QUICK ACCESS COMMANDS',
+          style: TextStyle(
+            color: p.accent,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _quickTile(
+              p,
+              icon: Icons.menu_book_outlined,
+              title: 'Courses ($_totalCourses)',
+              sub: 'Syllabi & Credits',
+              onTap: () => _openAcademicSection(0),
+            ),
+            const SizedBox(width: 8),
+            _quickTile(
+              p,
+              icon: Icons.schedule_outlined,
+              title: 'Timetables',
+              sub: 'Lectures & Exams',
+              onTap: () => _openAcademicSection(1),
+            ),
+            const SizedBox(width: 8),
+            _quickTile(
+              p,
+              icon: Icons.badge_outlined,
+              title: 'Faculty',
+              sub: 'Staff & Hours',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DepartmentDirectoryScreen(
+                    email: widget.user.email,
+                    roleKey: _roleKey,
+                    initialTab: 1,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'TIMETABLE SNAPSHOT',
+              style: TextStyle(
+                color: p.accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _openAcademicSection(1),
+              child: Text(
+                'Full Timetable \u2192',
+                style: TextStyle(color: p.accent, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_todaySchedule.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: p.border),
+            ),
+            child: Text(
+              'No lecture slots scheduled for this level yet.',
+              style: TextStyle(color: p.textSecondary, fontSize: 12.5),
+            ),
+          )
+        else
+          ..._todaySchedule.take(3).map(
+            (slot) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: p.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: p.border),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: p.accent.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      (slot['course_code'] ?? '').toString(),
+                      style: TextStyle(color: p.accent, fontWeight: FontWeight.bold, fontSize: 11.5),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          (slot['course_title'] ?? '').toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: p.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          '${slot['day_or_date']} \u2022 ${slot['time_slot']} \u2022 ${slot['venue']}',
+                          style: TextStyle(color: p.textSecondary, fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'ACADEMIC CALENDAR HIGHLIGHTS',
+              style: TextStyle(
+                color: p.accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _openAcademicSection(2),
+              child: Text(
+                'All Dates \u2192',
+                style: TextStyle(color: p.accent, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ..._calendarHighlights.take(3).map(
+          (ev) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: p.border),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.event_note_outlined, color: p.accent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (ev['title'] ?? '').toString(),
+                        style: TextStyle(color: p.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        '${ev['event_date']} \u2022 ${ev['category']}',
+                        style: TextStyle(color: p.textSecondary, fontSize: 11.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _quickTile(
+    EleesaPalette p, {
+    required IconData icon,
+    required String title,
+    required String sub,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: p.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: p.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: p.accent, size: 20),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.textPrimary, fontWeight: FontWeight.bold, fontSize: 12.5),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                sub,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.textSecondary, fontSize: 10.5),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -479,10 +724,12 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               setState(() => _bottomTab = 0);
             }),
             _drawerTile(p, Icons.calendar_today_outlined, 'Timetable & Calendar', () {
-              _showModuleWaveNotice('Timetable & Academic Calendar', 'Wave 2');
+              Navigator.pop(context);
+              _openAcademicSection(1);
             }),
             _drawerTile(p, Icons.account_tree_outlined, 'Courses & Curriculum', () {
-              _showModuleWaveNotice('Courses & Curriculum', 'Wave 2');
+              Navigator.pop(context);
+              _openAcademicSection(0);
             }),
             _drawerTile(p, Icons.memory_outlined, 'Labs & Equipment', () {
               _showModuleWaveNotice('Labs & Equipment', 'Wave 3');
@@ -533,9 +780,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const VisitorPortalScreen(
+                  builder: (_) => DepartmentDirectoryScreen(
+                    email: widget.user.email,
+                    roleKey: _roleKey,
                     initialTab: 0,
-                    isAuthenticatedViewer: true,
                   ),
                 ),
               );
@@ -545,9 +793,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const VisitorPortalScreen(
-                    initialTab: 2,
-                    isAuthenticatedViewer: true,
+                  builder: (_) => DepartmentDirectoryScreen(
+                    email: widget.user.email,
+                    roleKey: _roleKey,
+                    initialTab: 1,
                   ),
                 ),
               );
@@ -634,9 +883,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           studentName: (p['full_name'] ?? widget.user.fullName).toString(),
           level: level,
           indexNumber: (p['index_number'] ?? '').toString(),
-          onProfileTap: _openProfile,
+          onProfileTap: () => setState(() => _bottomTab = 4),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -675,7 +924,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 ),
               ),
               TextButton(
-                onPressed: _openProfile,
+                onPressed: () => setState(() => _bottomTab = 4),
                 child: Text(
                   'Vault',
                   style: TextStyle(
@@ -702,7 +951,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
           titleAndSpec:
               '${p['academic_title'] ?? 'Lecturer'}  \u2022  ${p['specialization'] ?? 'EEE Faculty'}',
           totalStudents: _levelCounts['total'] ?? 0,
-          onProfileTap: _openProfile,
+          onProfileTap: () => setState(() => _bottomTab = 4),
         ),
         const SizedBox(height: 16),
         _buildFourLevelStudentInspector(
@@ -723,7 +972,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
         HodMainGridHeader(
           hodName: (p['full_name'] ?? widget.user.fullName).toString(),
           levelCounts: _levelCounts,
-          onProfileTap: _openProfile,
+          onProfileTap: () => setState(() => _bottomTab = 4),
         ),
         const SizedBox(height: 16),
         _buildFourLevelStudentInspector(palette, accentColor: emerald),
@@ -788,16 +1037,9 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
     EleesaPalette palette, {
     required Color accentColor,
   }) {
-    final Object? rawEntry = _studentsByLevel[_selectedLevelTab];
-    final List<Map<String, dynamic>> rawList = <Map<String, dynamic>>[];
-    if (rawEntry is Iterable) {
-      for (final item in rawEntry) {
-        if (item is Map) {
-          rawList.add(Map<String, dynamic>.from(item));
-        }
-      }
-    }
-
+    final rawList = List<Map<String, dynamic>>.from(
+      _studentsByLevel[_selectedLevelTab] ?? [],
+    );
     final filtered = rawList.where((st) {
       if (_searchQuery.trim().isEmpty) return true;
       final q = _searchQuery.toLowerCase();
@@ -909,7 +1151,10 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 leading: CircleAvatar(
                   backgroundColor: accentColor.withValues(alpha: 0.18),
                   child: Text(
-                    _initialOf(st['full_name']),
+                    (st['full_name'] ?? 'S')
+                        .toString()
+                        .substring(0, 1)
+                        .toUpperCase(),
                     style: TextStyle(
                       color: accentColor,
                       fontWeight: FontWeight.bold,
