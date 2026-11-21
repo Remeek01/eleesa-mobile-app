@@ -16,8 +16,8 @@ workflows:
         script: |
           export PATH="$HOME/.shorebird/bin:$PATH"
           if [ -d "eleesa_app" ]; then cd eleesa_app; fi
-          shorebird release android --artifact apk --flutter-version=3.47.9
-          shorebird release ios --no-codesign --flutter-version=3.47.9
+          shorebird release android --artifact apk --flutter-version=3.47.9 -- --no-tree-shake-icons
+          shorebird release ios --no-codesign --flutter-version=3.47.9 -- --no-tree-shake-icons
       - name: Package Unsigned IPA for Sideloadly
         script: |
           if [ -d "eleesa_app" ]; then cd eleesa_app; fi

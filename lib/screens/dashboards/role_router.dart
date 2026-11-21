@@ -266,7 +266,7 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
                 NavigationDestination(
                   icon: Icon(Icons.menu_book_outlined, color: p.textSecondary),
                   selectedIcon: Icon(Icons.menu_book, color: p.accent),
-                  label: 'Academics',
+                  label: 'Study',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.groups_outlined, color: p.textSecondary),

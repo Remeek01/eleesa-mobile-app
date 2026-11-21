@@ -50,7 +50,7 @@ jobs:
       - name: Build iOS Release IPA
         if: github.event.inputs.mode == 'release'
         run: |
-          shorebird release ios --no-codesign --flutter-version=3.47.9
+          shorebird release ios --no-codesign --flutter-version=3.47.9 -- --no-tree-shake-icons
           mkdir -p build/ios/ipa/Payload
           if [ -d "build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app" ]; then
             cp -r build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app build/ios/ipa/Payload/
