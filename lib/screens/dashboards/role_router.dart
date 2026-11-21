@@ -10,6 +10,7 @@ import '../academic/department_directory_screen.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
+import '../wave3/wave3_hub_screen.dart';
 
 class RoleBasedDashboard extends StatefulWidget {
   final EleesaUser user;
@@ -669,6 +670,25 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
   }
 
   // --- CATEGORIZED NAVIGATION DRAWER (Item #11 & #13) ---
+  void _openWave3Section(EleesaPalette p, String displayName, int tabIndex) {
+    Navigator.pop(context);
+    final lvl = (_profile?['level']?.toString().trim().isNotEmpty == true)
+        ? _profile!['level'].toString()
+        : '300';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Wave3HubScreen(
+          initialTabIndex: tabIndex,
+          userRole: 'student',
+          userName: displayName,
+          userEmail: widget.user.email,
+          userLevel: lvl,
+          accentColor: p.accent,
+        ),
+      ),
+    );
+  }
   Widget _buildCategorizedDrawer(EleesaPalette p, String displayName) {
     return Drawer(
       backgroundColor: p.surface,
@@ -732,19 +752,19 @@ class _RoleBasedDashboardState extends State<RoleBasedDashboard> {
               _openAcademicSection(0);
             }),
             _drawerTile(p, Icons.memory_outlined, 'Labs & Equipment', () {
-              _showModuleWaveNotice('Labs & Equipment', 'Wave 3');
+              _openWave3Section(p, displayName, 1);
             }),
 
             const SizedBox(height: 10),
             _drawerCategory(p, 'STUDY & ENGINEERING'),
             _drawerTile(p, Icons.folder_special_outlined, 'Resource Library & Uploads', () {
-              _showModuleWaveNotice('Resource Library & Uploads', 'Wave 3');
+              _openWave3Section(p, displayName, 0);
             }),
             _drawerTile(p, Icons.science_outlined, 'Projects & Research', () {
-              _showModuleWaveNotice('Projects & Research', 'Wave 3');
+              _openWave3Section(p, displayName, 2);
             }),
             _drawerTile(p, Icons.engineering_outlined, 'Industrial Attachment', () {
-              _showModuleWaveNotice('Industrial Attachment', 'Wave 3');
+              _openWave3Section(p, displayName, 3);
             }),
             _drawerTile(p, Icons.calculate_outlined, 'EEE Tools & CGPA Calc', () {
               _showModuleWaveNotice('Engineering Tools & CGPA', 'Wave 5');
